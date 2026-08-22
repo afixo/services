@@ -31,7 +31,22 @@ esac
 
 command -v cloudflared >/dev/null || { echo "cloudflared not installed (brew install cloudflared)" >&2; exit 1; }
 
-cloudflared tunnel login >/dev/null 2>&1 || true
+# `cloudflared tunnel route dns` appends the zone of the origin certificate it
+# is using — and `tunnel login` is a no-op when ~/.cloudflared/cert.pem already
+# exists for ANOTHER zone, which silently creates origin.afixo.io.<other-zone>.
+# So this script only ever uses a certificate dedicated to afixo.io.
+export TUNNEL_ORIGIN_CERT="$HOME/.cloudflared/afixo.io.pem"
+if [ ! -f "$TUNNEL_ORIGIN_CERT" ]; then
+  cat >&2 <<EOF
+No origin certificate for afixo.io at $TUNNEL_ORIGIN_CERT. Create one:
+  mv ~/.cloudflared/cert.pem ~/.cloudflared/cert.pem.other 2>/dev/null   # keep any other zone's cert aside
+  cloudflared tunnel login          # pick the afixo.io zone in the browser
+  mv ~/.cloudflared/cert.pem $TUNNEL_ORIGIN_CERT
+  mv ~/.cloudflared/cert.pem.other ~/.cloudflared/cert.pem 2>/dev/null
+then re-run this script.
+EOF
+  exit 1
+fi
 
 if ! cloudflared tunnel list --name "$name" -o json | jq -e '.[0]' >/dev/null 2>&1; then
   cloudflared tunnel create "$name"

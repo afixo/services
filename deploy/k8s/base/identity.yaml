@@ -36,6 +36,8 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532   # distroless "nonroot"; the kubelet cannot verify a named user
+        runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:

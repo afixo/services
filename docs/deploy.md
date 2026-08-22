@@ -14,7 +14,7 @@ tunnel, databases, secrets and Worker hostnames.
 | Resource | How | Used by |
 |---|---|---|
 | DOKS cluster | exists | both environments |
-| Managed PostgreSQL | smallest plan, same region/VPC; databases `afixo_auth`, `afixo_identity`, `afixo_policy`, `afixo_audit` and `afixo_*_staging`; ideally one user per database; the **private** host with `sslmode=require` | `*_DATABASE_URL` in each namespace's `afixo-secrets` |
+| PostgreSQL | **in the cluster**, not managed: `deploy/k8s/base/postgres.yaml` runs `postgres:17-alpine` as a StatefulSet per namespace on a 10 Gi `do-block-storage-retain` volume (~$1/month; the PV survives deleting the StatefulSet or namespace). Databases `afixo_auth/identity/policy/audit` are created on first boot from `postgres-init`. No backups beyond the volume — take `pg_dump`s if the data matters. | `POSTGRES_PASSWORD` in `afixo-secrets`; the `*_DATABASE_URL`s are derived by `create-secrets.sh` |
 | CI deploy identity, **per namespace** | `deploy/scripts/make-ci-kubeconfig.sh <staging\|production>` — a `github-deployer` ServiceAccount confined to the namespace (no Secrets, no delete, no other namespaces); uploads its kubeconfig as the GitHub environment secret `KUBE_CONFIG` | `deploy.yml` (no DigitalOcean API token needed) |
 
 There is **no DigitalOcean container registry**. Images live in GitHub's
@@ -31,7 +31,7 @@ After the first push, each package appears under the org's *Packages* tab as
 private; the `org.opencontainers.image.source` label in the `Dockerfile` links
 it to this repo so the workflow keeps write access on later pushes.
 
-No load balancer, no block storage, no inbound firewall rule — keep the default
+No load balancer, no inbound firewall rule — keep the default
 DOKS firewall object; it stays empty.
 
 ## What Cloudflare needs
@@ -100,8 +100,8 @@ want a manual gate.
 
 ## Sizing notes for the 1-vCPU node
 
-Requests: 25m/32Mi per Rust service and cloudflared — ~175m / ~225Mi per
-environment, ~350m / ~450Mi for both, leaving room for surge pods during
+Requests: 25m/32Mi per Rust service and cloudflared, 100m/160Mi for Postgres — ~275m / ~385Mi per
+environment, ~550m / ~770Mi for both, leaving room for surge pods during
 rolling updates. Memory limits only (128Mi); no CPU limits, to avoid
 throttling a single-core node. Raise the pool to two nodes before adding
 replicas — a second replica on the same node buys nothing.
@@ -111,7 +111,7 @@ replicas — a second replica on the same node buys nothing.
 - Validate `Cf-Access-Jwt-Assertion` at the gateway (JWKS from
   `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`) as defence in
   depth behind Access.
-- Backups: managed Postgres has daily backups; the audit database is the
+- Backups: the in-cluster Postgres has none beyond its block volume; the audit database is the
   record — back it up and test a restore.
 - Observability beyond logs: OpenTelemetry traces (`tracing-opentelemetry`)
   and Prometheus metrics are not wired.

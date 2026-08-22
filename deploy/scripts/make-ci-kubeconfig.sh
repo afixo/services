@@ -54,7 +54,7 @@ rules:
   # Everything deploy/k8s/base renders, minus Secrets (created by
   # create-secrets.sh and cloudflare-tunnel-setup.sh, never by CI).
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "statefulsets"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: [""]
     resources: ["services", "configmaps"]

@@ -2,8 +2,8 @@
 # staging overlay patches the hostname-bearing keys). Secrets live in the
 # `afixo-secrets` Secret, created out-of-band by deploy/scripts/create-secrets.sh
 # with these keys:
-#   AUTH_DATABASE_URL, IDENTITY_DATABASE_URL, POLICY_DATABASE_URL, AUDIT_DATABASE_URL
-#   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+#   POSTGRES_PASSWORD (in-cluster postgres.yaml), GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+#   AUTH_DATABASE_URL, IDENTITY_DATABASE_URL, POLICY_DATABASE_URL, AUDIT_DATABASE_URL (derived)
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -1,5 +1,5 @@
 # Ingress is default-deny in the namespace; each allowed path is listed.
-# Egress is left open (managed Postgres, GitHub, the Cloudflare edge).
+# Egress is left open (GitHub OAuth, the Cloudflare edge).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -46,3 +46,21 @@ spec:
               afixo.io/tier: backend
       ports:
         - port: 50051
+---
+# Postgres accepts connections from the backend tier only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              afixo.io/tier: backend
+      ports:
+        - port: 5432

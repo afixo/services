@@ -11,6 +11,7 @@ labels:
 resources:
   - config.yaml
   - network-policy.yaml
+  - postgres.yaml
   - cloudflared.yaml
   - gateway.yaml
   - auth.yaml
