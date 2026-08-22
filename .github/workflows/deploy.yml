@@ -2,10 +2,13 @@
 # packages, pushed with the workflow's own GITHUB_TOKEN), then apply an overlay
 # and wait for the rollouts.
 #
-#   push to master      → staging  (namespace afixo-staging), automatically
-#   workflow_dispatch   → staging or production (namespace afixo), by choice
+#   push to master      → production (namespace afixo), automatically
+#   workflow_dispatch   → production (re-deploy / rebuild a chosen set of services)
 #
-# Environment secret (staging, production): KUBE_CONFIG — a namespace-confined
+# There is no backend staging environment for now; the staging branches below
+# are commented out, not deleted (the overlay in deploy/k8s/overlays/staging stays).
+#
+# Environment secret (production): KUBE_CONFIG — a namespace-confined
 #   ServiceAccount kubeconfig from deploy/scripts/make-ci-kubeconfig.sh <env>.
 #   No DigitalOcean API token is needed anywhere.
 # Repository variable (optional): IMAGE_REGISTRY
@@ -34,8 +37,9 @@ on:
       environment:
         description: Target environment
         type: choice
-        options: [staging, production]
-        default: staging
+        # options: [staging, production]   # no staging environment yet
+        options: [production]
+        default: production
         required: true
       services:
         description: 'Comma-separated services to build (or "all", or "none" to only re-apply manifests)'
@@ -47,7 +51,7 @@ permissions:
   packages: write # push to ghcr.io
 
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
   cancel-in-progress: false
 
 env:
@@ -91,14 +95,14 @@ jobs:
         id: plan
         env:
           INPUT: ${{ github.event.inputs.services }}
-          TARGET: ${{ github.event.inputs.environment || 'staging' }}
+          TARGET: ${{ github.event.inputs.environment || 'production' }}
           SHARED: ${{ steps.changes.outputs.shared }}
           CHANGED: ${{ toJSON(steps.changes.outputs) }}
         run: |
           set -euo pipefail
           case "$TARGET" in
             production) overlay=prod;    namespace=afixo ;;
-            staging)    overlay=staging; namespace=afixo-staging ;;
+            # staging)  overlay=staging; namespace=afixo-staging ;;   # no staging environment yet
             *) echo "unknown environment $TARGET" >&2; exit 1 ;;
           esac
           list=""
