@@ -24,7 +24,13 @@ case "$pw" in *[!A-Za-z0-9_.-]*)
   echo "error: POSTGRES_PASSWORD must be URL-safe ([A-Za-z0-9_.-]); it is embedded in the DATABASE_URLs" >&2; exit 1 ;;
 esac
 
-args=(--from-env-file="$file")
+# kubectl refuses --from-env-file together with --from-literal, so every
+# non-empty, non-comment line of the file becomes a literal.
+args=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  args+=(--from-literal="$line")
+done < "$file"
 for svc in auth identity policy audit; do
   key="$(echo "$svc" | tr a-z A-Z)_DATABASE_URL"
   url=$(get "$key")
