@@ -14,10 +14,22 @@ tunnel, databases, secrets and Worker hostnames.
 | Resource | How | Used by |
 |---|---|---|
 | DOKS cluster | exists | both environments |
-| Container registry (DOCR) | `doctl registry create afixo --region fra1` (names are global; if taken, set repo variable `DOCR_REGISTRY` and the `images:` names in both overlays) | `deploy.yml`, image pulls |
-| Registry pull secret, **per namespace** | `doctl registry kubernetes-manifest --namespace <ns> --name registry-afixo \| kubectl apply -f -` (after `kubectl create ns <ns>`) | every Deployment (`imagePullSecrets: registry-afixo`, patched in the overlays) |
 | Managed PostgreSQL | smallest plan, same region/VPC; databases `afixo_auth`, `afixo_identity`, `afixo_policy`, `afixo_audit` and `afixo_*_staging`; ideally one user per database; the **private** host with `sslmode=require` | `*_DATABASE_URL` in each namespace's `afixo-secrets` |
-| API token | read/write, for GitHub Actions (`DIGITALOCEAN_ACCESS_TOKEN`) | CI/CD |
+| API token | scope `kubernetes:read` is enough (only `kubeconfig save` uses it), for GitHub Actions (`DIGITALOCEAN_ACCESS_TOKEN`) | CI/CD |
+
+There is **no DigitalOcean container registry**. Images live in GitHub's
+registry as private packages `ghcr.io/afixo/services/<service>`, pushed by
+`deploy.yml` with its own `GITHUB_TOKEN` (`permissions: packages: write`) —
+nothing to create on the push side. Pulling needs a credential in the cluster:
+
+| Resource | How | Used by |
+|---|---|---|
+| GitHub PAT for pulls | classic PAT, scope **`read:packages` only**, no expiry or a long one (rotate = recreate both Secrets below) | the pull secret |
+| Pull secret `registry-afixo`, **per namespace** | `kubectl -n <ns> create secret docker-registry registry-afixo --docker-server=ghcr.io --docker-username=<github user> --docker-password=<PAT>` (after `kubectl create ns <ns>`) | every Deployment (`imagePullSecrets: registry-afixo`, patched in the overlays) |
+
+After the first push, each package appears under the org's *Packages* tab as
+private; the `org.opencontainers.image.source` label in the `Dockerfile` links
+it to this repo so the workflow keeps write access on later pushes.
 
 No load balancer, no block storage, no inbound firewall rule — keep the default
 DOKS firewall object; it stays empty.
@@ -52,7 +64,8 @@ DOKS firewall object; it stays empty.
 ```sh
 ns=afixo            # or afixo-staging
 kubectl create ns $ns
-doctl registry kubernetes-manifest --namespace $ns --name registry-afixo | kubectl apply -f -
+kubectl -n $ns create secret docker-registry registry-afixo \
+  --docker-server=ghcr.io --docker-username=<github user> --docker-password=<PAT read:packages>
 NAMESPACE=$ns deploy/scripts/create-secrets.sh deploy/k8s/overlays/prod/secrets/.env.prod   # gitignored file
 deploy/scripts/cloudflare-tunnel-setup.sh production                                       # or staging
 # images: let deploy.yml build them (push to master → staging; dispatch → production),
@@ -62,9 +75,11 @@ make k8s-status ENV=prod
 deploy/scripts/verify-edge.sh production
 ```
 
-GitHub repository secrets for `afixo-services`: `DIGITALOCEAN_ACCESS_TOKEN`.
+GitHub repository secrets for `afixo/services`: `DIGITALOCEAN_ACCESS_TOKEN`
+(repo-level, not environment-level: the `build` job has no environment).
 Optional variables: `DOKS_CLUSTER_NAME` (default `k8s-afixo-io-fra1`),
-`DOCR_REGISTRY` (default `registry.digitalocean.com/afixo`). Create the
+`IMAGE_REGISTRY` (default `ghcr.io/afixo/services`; changing it also means
+changing the image names in `deploy/k8s`). Create the
 GitHub environments `staging` and `production` (the latter with a required
 reviewer if you want a manual gate).
 

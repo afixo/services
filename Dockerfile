@@ -34,7 +34,7 @@ RUN cargo build --release --locked -p afixo-${SERVICE} \
 # distroless cc: glibc + libgcc, no shell, no package manager, runs as nonroot.
 FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 ARG SERVICE
-LABEL org.opencontainers.image.source="https://github.com/afixo/afixo-services" \
+LABEL org.opencontainers.image.source="https://github.com/afixo/services" \
       org.opencontainers.image.title="afixo-${SERVICE}"
 COPY --from=builder /usr/local/bin/service /usr/local/bin/service
 USER nonroot:nonroot

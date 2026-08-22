@@ -15,8 +15,9 @@ resources:
   - ../../base
 
 patches:
-  # DOCR pull credentials, created once per namespace with
-  #   doctl registry kubernetes-manifest --namespace afixo-staging --name registry-afixo | kubectl apply -f -
+  # ghcr.io pull credentials (the packages are private), created once per namespace:
+  #   kubectl -n afixo-staging create secret docker-registry registry-afixo \
+  #     --docker-server=ghcr.io --docker-username=<github user> --docker-password=<PAT with read:packages>
   - target:
       kind: Deployment
     patch: |-
@@ -28,15 +29,15 @@ patches:
   - path: cloudflared-patch.yaml
 
 images:
-  - name: registry.digitalocean.com/afixo/gateway
+  - name: ghcr.io/afixo/services/gateway
     newTag: latest
-  - name: registry.digitalocean.com/afixo/auth
+  - name: ghcr.io/afixo/services/auth
     newTag: latest
-  - name: registry.digitalocean.com/afixo/identity
+  - name: ghcr.io/afixo/services/identity
     newTag: latest
-  - name: registry.digitalocean.com/afixo/policy
+  - name: ghcr.io/afixo/services/policy
     newTag: latest
-  - name: registry.digitalocean.com/afixo/disclosure
+  - name: ghcr.io/afixo/services/disclosure
     newTag: latest
-  - name: registry.digitalocean.com/afixo/audit
+  - name: ghcr.io/afixo/services/audit
     newTag: latest

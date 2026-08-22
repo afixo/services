@@ -1,11 +1,14 @@
-# Build the images whose sources changed, push them to DOCR, then apply an
-# overlay and wait for the rollouts.
+# Build the images whose sources changed, push them to ghcr.io (private
+# packages, pushed with the workflow's own GITHUB_TOKEN), then apply an overlay
+# and wait for the rollouts.
 #
 #   push to master      → staging  (namespace afixo-staging), automatically
 #   workflow_dispatch   → staging or production (namespace afixo), by choice
 #
-# Repository secrets:  DIGITALOCEAN_ACCESS_TOKEN (read/write: registry + kubernetes)
-# Repository variables (optional): DOKS_CLUSTER_NAME, DOCR_REGISTRY
+# Repository secrets:  DIGITALOCEAN_ACCESS_TOKEN (kubernetes read — kubeconfig only)
+# Repository variables (optional): DOKS_CLUSTER_NAME, IMAGE_REGISTRY
+# The cluster pulls with the `registry-afixo` docker-registry Secret in each
+# namespace (a PAT with read:packages) — see docs/deploy.md.
 #
 # A change under crates/, proto/, Cargo.*, or Dockerfile rebuilds EVERY service
 # — a shared crate or a .proto edit changes all of them, and a filter watching
@@ -39,13 +42,16 @@ on:
 
 permissions:
   contents: read
+  packages: write # push to ghcr.io
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 env:
-  REGISTRY: ${{ vars.DOCR_REGISTRY || 'registry.digitalocean.com/afixo' }}
+  # ghcr.io/afixo/services/<service>; the image name must stay in sync with
+  # deploy/k8s/base/*.yaml and the `images:` lists in both overlays.
+  REGISTRY: ${{ vars.IMAGE_REGISTRY || format('ghcr.io/{0}', github.repository) }}
   CLUSTER: ${{ vars.DOKS_CLUSTER_NAME || 'k8s-afixo-io-fra1' }}
   ALL_SERVICES: gateway auth identity policy disclosure audit
 
@@ -130,10 +136,11 @@ jobs:
         service: ${{ fromJSON(needs.plan.outputs.services) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: digitalocean/action-doctl@v2
+      - uses: docker/login-action@v3
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      - run: doctl registry login --expiry-seconds 3600
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:

@@ -40,7 +40,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: identity
-          image: registry.digitalocean.com/afixo/identity:latest
+          image: ghcr.io/afixo/services/identity:latest
           envFrom:
             - configMapRef:
                 name: afixo-config

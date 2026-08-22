@@ -40,7 +40,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: policy
-          image: registry.digitalocean.com/afixo/policy:latest
+          image: ghcr.io/afixo/services/policy:latest
           envFrom:
             - configMapRef:
                 name: afixo-config

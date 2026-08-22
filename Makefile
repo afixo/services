@@ -3,7 +3,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 SERVICES := gateway auth identity policy disclosure audit
-REGISTRY ?= registry.digitalocean.com/afixo
+REGISTRY ?= ghcr.io/afixo/services
 TAG      ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 # kubernetes targets: ENV=prod (namespace afixo) or ENV=staging (namespace afixo-staging)
 ENV      ?= staging

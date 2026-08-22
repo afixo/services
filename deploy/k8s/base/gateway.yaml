@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: registry.digitalocean.com/afixo/gateway:latest
+          image: ghcr.io/afixo/services/gateway:latest
           envFrom:
             - configMapRef:
                 name: afixo-config

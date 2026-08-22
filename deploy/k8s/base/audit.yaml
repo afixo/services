@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: audit
-          image: registry.digitalocean.com/afixo/audit:latest
+          image: ghcr.io/afixo/services/audit:latest
           envFrom:
             - configMapRef:
                 name: afixo-config
