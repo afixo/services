@@ -8,6 +8,8 @@ ignore = []
 
 [licenses]
 version = 2
+# our own crates are publish = false and have no license field; do not report them
+private = { ignore = true }
 allow = [
   "MIT",
   "Apache-2.0",
@@ -33,6 +35,9 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# our path-only workspace crates (afixo-proto/common/engine) carry no version;
+# they are private, so a wildcard there is fine — registry wildcards stay denied
+allow-wildcard-paths = true
 deny = [
   # we are rustls-only; openssl must not sneak in through a feature flag
   { crate = "openssl-sys" },

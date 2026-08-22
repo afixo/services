@@ -6,9 +6,11 @@
 ARG RUST_VERSION=1.96
 
 # ---------------------------------------------------------------- toolchain --
+# libprotobuf-dev ships the well-known types (google/protobuf/*.proto) that
+# protobuf-compiler alone does not; crates/proto imports timestamp.proto.
 FROM rust:${RUST_VERSION}-bookworm AS chef
 RUN apt-get update \
- && apt-get install -y --no-install-recommends protobuf-compiler \
+ && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
  && rm -rf /var/lib/apt/lists/* \
  && cargo install cargo-chef --locked
 WORKDIR /app

@@ -61,9 +61,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check advisories licenses bans sources
+      # Not the container action: it ships its own musl toolchain, and
+      # rust-toolchain.toml then points at a toolchain that is not installed.
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check advisories licenses bans sources
 
   manifests:
     name: kustomize render
