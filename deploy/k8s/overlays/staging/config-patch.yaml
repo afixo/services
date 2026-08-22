@@ -1,0 +1,10 @@
+# Staging values for the hostname-bearing keys (strategic merge onto base/config.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: afixo-config
+data:
+  RUST_LOG: "debug,sqlx=info,h2=warn,hyper=warn"
+  CORS_ALLOWED_ORIGINS: "https://staging.afixo.io"
+  GITHUB_REDIRECT_URI: "https://staging.afixo.io/api/v1/auth/github/callback"
+  PUBLIC_BASE_URL: "https://staging.afixo.io"

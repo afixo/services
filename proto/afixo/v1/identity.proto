@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "afixo/v1/common.proto";
+
+// identity-service owns subjects, personas and persona fields.
+// Every mutating RPC carries the acting subject_id and the service re-checks
+// ownership; it never trusts that the gateway already did.
+service IdentityService {
+  // Called by auth-service on first login. Idempotent on handle.
+  rpc EnsureSubject(EnsureSubjectRequest) returns (Subject);
+  rpc GetSubject(GetSubjectRequest) returns (Subject);
+  rpc ResolveSubject(ResolveSubjectRequest) returns (Subject);
+
+  rpc ListPersonas(ListPersonasRequest) returns (ListPersonasResponse);
+  rpc CreatePersona(CreatePersonaRequest) returns (Persona);
+  rpc GetPersona(GetPersonaRequest) returns (Persona);
+  rpc DeletePersona(DeletePersonaRequest) returns (DeletePersonaResponse);
+
+  rpc UpsertField(UpsertFieldRequest) returns (Persona);
+  rpc DeleteField(DeleteFieldRequest) returns (Persona);
+}
+
+message EnsureSubjectRequest {
+  string handle = 1;
+  string display_name = 2;
+}
+
+message GetSubjectRequest {
+  string subject_id = 1;
+}
+
+message ResolveSubjectRequest {
+  string handle = 1;
+}
+
+message ListPersonasRequest {
+  string subject_id = 1;
+}
+message ListPersonasResponse {
+  repeated Persona personas = 1;
+}
+
+message CreatePersonaRequest {
+  string subject_id = 1;
+  string label = 2;
+}
+
+message GetPersonaRequest {
+  string persona_id = 1;
+  // When set the persona must belong to this subject (NOT_FOUND otherwise).
+  // disclosure-service leaves it unset and checks persona.subject_id itself.
+  optional string subject_id = 2;
+}
+
+message DeletePersonaRequest {
+  string subject_id = 1;
+  string persona_id = 2;
+}
+message DeletePersonaResponse {}
+
+message UpsertFieldRequest {
+  string subject_id = 1;
+  string persona_id = 2;
+  Field field = 3;
+}
+
+message DeleteFieldRequest {
+  string subject_id = 1;
+  string persona_id = 2;
+  string key = 3;
+}

@@ -1,0 +1,42 @@
+# Staging: namespace `afixo-staging` on the same cluster, its own tunnel
+# (origin-staging.afixo.io / origin-api-staging.afixo.io), its own databases
+# and secrets, reached through the afixo-web-staging / afixo-api-staging Workers
+# at staging.afixo.io / api-staging.afixo.io.
+#
+# Same images as production; `master` deploys here automatically (deploy.yml),
+# production is promoted by workflow_dispatch.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: afixo-staging
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+patches:
+  # DOCR pull credentials, created once per namespace with
+  #   doctl registry kubernetes-manifest --namespace afixo-staging --name registry-afixo | kubectl apply -f -
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: registry-afixo
+  - path: config-patch.yaml
+  - path: cloudflared-patch.yaml
+
+images:
+  - name: registry.digitalocean.com/afixo/gateway
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/auth
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/identity
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/policy
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/disclosure
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/audit
+    newTag: latest

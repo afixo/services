@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// audit-service keeps the append-only, hash-chained record of every disclosure
+// decision. disclosure-service calls Record synchronously and answers the
+// requester only after it succeeds, so no disclosure can go unlogged (the
+// guarantee of FINAL_REPORT §4.3, kept in the rewrite).
+//
+// hash = SHA-256(prev_hash || canonical(decision)); the genesis prev_hash is 32 zero bytes.
+service AuditService {
+  // Append one decision. Idempotent on event_id: a retry after a timeout
+  // returns the existing row's seq instead of creating a second one.
+  rpc Record(RecordDecisionRequest) returns (RecordDecisionResponse);
+  rpc ListDecisions(ListDecisionsRequest) returns (ListDecisionsResponse);
+  // Walks the chain in seq order and reports the first break, if any.
+  rpc VerifyChain(VerifyChainRequest) returns (VerifyChainResponse);
+}
+
+// One disclosure decision, as produced by disclosure-service. Field values
+// never appear here — keys only.
+message DisclosureDecided {
+  string event_id = 1;            // uuid v7 — also the decision_id returned to the requester
+  string subject_id = 2;          // zero uuid when the handle did not resolve
+  string requester_id = 3;
+  string purpose = 4;
+  bool allowed = 5;
+  string reason = 6;              // "rule_matched" | "no_matching_rule" | "unknown_subject" | "persona_missing" | "persona_foreign"
+  string persona_id = 7;
+  string persona_label = 8;
+  string rule_id = 9;
+  repeated string disclosed_keys = 10;
+  repeated string withheld_keys = 11;
+  google.protobuf.Timestamp decided_at = 12;
+}
+
+message RecordDecisionRequest {
+  DisclosureDecided decision = 1;
+}
+message RecordDecisionResponse {
+  int64 seq = 1;
+  bytes hash = 2;
+}
+
+message DecisionRecord {
+  int64 seq = 1;
+  string event_id = 2;
+  string subject_id = 3;
+  string requester_id = 4;
+  string purpose = 5;
+  bool allowed = 6;
+  string reason = 7;
+  string persona_id = 8;
+  string persona_label = 9;
+  repeated string disclosed_keys = 10;
+  repeated string withheld_keys = 11;
+  google.protobuf.Timestamp decided_at = 12;
+  google.protobuf.Timestamp recorded_at = 13;
+  bytes hash = 14;
+  bytes prev_hash = 15;
+}
+
+message ListDecisionsRequest {
+  string subject_id = 1;
+  int32 limit = 2;              // 1..=200, default 50
+  optional int64 before_seq = 3; // keyset pagination, newest first
+}
+message ListDecisionsResponse {
+  repeated DecisionRecord decisions = 1;
+  optional int64 next_before_seq = 2;
+}
+
+message VerifyChainRequest {}
+message VerifyChainResponse {
+  bool ok = 1;
+  int64 length = 2;
+  optional int64 broken_at_seq = 3;
+  bytes head_hash = 4;
+}

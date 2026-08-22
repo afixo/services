@@ -1,0 +1,22 @@
+[package]
+name = "afixo-auth"
+description = "auth-service: GitHub login + rotating sessions for subjects; client-credentials + requester registry for machines"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+afixo-proto.workspace = true
+afixo-common.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+time.workspace = true
+
+[lints]
+workspace = true

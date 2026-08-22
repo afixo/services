@@ -1,0 +1,185 @@
+# Build the images whose sources changed, push them to DOCR, then apply an
+# overlay and wait for the rollouts.
+#
+#   push to master      → staging  (namespace afixo-staging), automatically
+#   workflow_dispatch   → staging or production (namespace afixo), by choice
+#
+# Repository secrets:  DIGITALOCEAN_ACCESS_TOKEN (read/write: registry + kubernetes)
+# Repository variables (optional): DOKS_CLUSTER_NAME, DOCR_REGISTRY
+#
+# A change under crates/, proto/, Cargo.*, or Dockerfile rebuilds EVERY service
+# — a shared crate or a .proto edit changes all of them, and a filter watching
+# only services/** would go green having shipped nothing.
+name: deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "services/**"
+      - "crates/**"
+      - "proto/**"
+      - "deploy/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Dockerfile"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+        required: true
+      services:
+        description: 'Comma-separated services to build (or "all", or "none" to only re-apply manifests)'
+        default: all
+        required: true
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.DOCR_REGISTRY || 'registry.digitalocean.com/afixo' }}
+  CLUSTER: ${{ vars.DOKS_CLUSTER_NAME || 'k8s-afixo-io-fra1' }}
+  ALL_SERVICES: gateway auth identity policy disclosure audit
+
+jobs:
+  plan:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.plan.outputs.services }}   # JSON array
+      any: ${{ steps.plan.outputs.any }}
+      environment: ${{ steps.plan.outputs.environment }}
+      overlay: ${{ steps.plan.outputs.overlay }}
+      namespace: ${{ steps.plan.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            shared:
+              - "crates/**"
+              - "proto/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "Dockerfile"
+            gateway:    ["services/gateway/**"]
+            auth:       ["services/auth/**"]
+            identity:   ["services/identity/**"]
+            policy:     ["services/policy/**"]
+            disclosure: ["services/disclosure/**"]
+            audit:      ["services/audit/**"]
+
+      - name: Resolve environment and service list
+        id: plan
+        env:
+          INPUT: ${{ github.event.inputs.services }}
+          TARGET: ${{ github.event.inputs.environment || 'staging' }}
+          SHARED: ${{ steps.changes.outputs.shared }}
+          CHANGED: ${{ toJSON(steps.changes.outputs) }}
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            production) overlay=prod;    namespace=afixo ;;
+            staging)    overlay=staging; namespace=afixo-staging ;;
+            *) echo "unknown environment $TARGET" >&2; exit 1 ;;
+          esac
+          list=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "$INPUT" in
+              all)  list="$ALL_SERVICES" ;;
+              none) list="" ;;
+              *)    list=$(echo "$INPUT" | tr ',' ' ') ;;
+            esac
+          elif [ "$SHARED" = "true" ]; then
+            list="$ALL_SERVICES"
+          else
+            for s in $ALL_SERVICES; do
+              if [ "$(echo "$CHANGED" | jq -r --arg s "$s" '.[$s]')" = "true" ]; then list="$list $s"; fi
+            done
+          fi
+          json=$(echo $list | tr ' ' '\n' | sed '/^$/d' | jq -R . | jq -cs .)
+          {
+            echo "services=$json"
+            echo "any=$([ "$json" != "[]" ] && echo true || echo false)"
+            echo "environment=$TARGET"
+            echo "overlay=$overlay"
+            echo "namespace=$namespace"
+          } >> "$GITHUB_OUTPUT"
+          echo "target: $TARGET ($overlay / $namespace); building: $json"
+
+  build:
+    name: build ${{ matrix.service }}
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.plan.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 3600
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: SERVICE=${{ matrix.service }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+  deploy:
+    name: apply ${{ needs.plan.outputs.environment }} + rollout
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ needs.plan.outputs.environment }}
+    env:
+      OVERLAY: deploy/k8s/overlays/${{ needs.plan.outputs.overlay }}
+      NAMESPACE: ${{ needs.plan.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - uses: imranismail/setup-kustomize@v2
+      - run: doctl kubernetes cluster kubeconfig save --expiry-seconds 1800 "$CLUSTER"
+
+      - name: Pin the images that were just built
+        env:
+          SERVICES: ${{ needs.plan.outputs.services }}
+        run: |
+          cd "$OVERLAY"
+          for s in $(echo "$SERVICES" | jq -r '.[]'); do
+            kustomize edit set image "$REGISTRY/$s=$REGISTRY/$s:${{ github.sha }}"
+          done
+          kustomize build . > /tmp/rendered.yaml
+          grep -E "image: " /tmp/rendered.yaml | sort -u
+
+      - name: Apply
+        run: kubectl apply -k "$OVERLAY"
+
+      - name: Wait for rollouts
+        env:
+          SERVICES: ${{ needs.plan.outputs.services }}
+        run: |
+          for s in $(echo "$SERVICES" | jq -r '.[]'); do
+            kubectl -n "$NAMESPACE" rollout status deploy/"$s" --timeout=240s
+          done
+          kubectl -n "$NAMESPACE" get pods -o wide

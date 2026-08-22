@@ -1,0 +1,37 @@
+# Production: namespace `afixo`, hostnames origin.afixo.io / origin-api.afixo.io
+# (base values). DOKS `k8s-afixo-io-fra1`, 1 × s-1vcpu-2gb as of 2026-08-22.
+# Image tags are rewritten by CI (`kustomize edit set image …:<sha>`);
+# `latest` is only a placeholder for a first manual apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: afixo
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+# DOCR pull credentials, created once per namespace with
+#   doctl registry kubernetes-manifest --namespace afixo --name registry-afixo | kubectl apply -f -
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: registry-afixo
+
+images:
+  - name: registry.digitalocean.com/afixo/gateway
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/auth
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/identity
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/policy
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/disclosure
+    newTag: latest
+  - name: registry.digitalocean.com/afixo/audit
+    newTag: latest

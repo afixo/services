@@ -1,0 +1,22 @@
+[package]
+name = "afixo-disclosure"
+description = "disclosure-service: the product hot path — orchestrates identity + policy, runs the engine, publishes the decision"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+afixo-proto.workspace = true
+afixo-common.workspace = true
+afixo-engine.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+time.workspace = true
+
+[lints]
+workspace = true

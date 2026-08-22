@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// disclosure-service is the product's hot path and owns no data. Given
+// (subject handle, requester, purpose) it resolves the subject, gathers
+// candidate rules and the winning persona, runs afixo-engine, durably publishes
+// a DisclosureDecided event (JetStream ack awaited) and only then answers.
+service DisclosureService {
+  rpc Disclose(DiscloseRequest) returns (DiscloseResponse);
+}
+
+message DiscloseRequest {
+  string subject_handle = 1;
+  string requester_id = 2;   // already authenticated by the gateway via auth.IntrospectToken
+  string purpose = 3;
+}
+
+message DiscloseResponse {
+  string decision_id = 1;
+  bool allowed = 2;
+  // Machine-readable reason; on allow it is "rule_matched". On deny one of:
+  // "no_matching_rule" | "unknown_subject" | "persona_missing" — the gateway
+  // collapses every deny to a uniform 403 (no subject enumeration).
+  string reason = 3;
+  string persona_label = 4;
+  map<string, string> fields = 5;
+  // Keys filtered out by the ceiling or the allow-list. Names only, never values.
+  repeated string withheld_keys = 6;
+  google.protobuf.Timestamp decided_at = 7;
+}

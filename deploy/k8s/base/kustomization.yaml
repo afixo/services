@@ -1,0 +1,20 @@
+# Environment-agnostic workloads. Namespaces, image tags, hostnames and pull
+# secrets are set by the overlays (deploy/k8s/overlays/{prod,staging}).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: afixo
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - config.yaml
+  - network-policy.yaml
+  - cloudflared.yaml
+  - gateway.yaml
+  - auth.yaml
+  - identity.yaml
+  - policy.yaml
+  - disclosure.yaml
+  - audit.yaml

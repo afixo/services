@@ -1,0 +1,22 @@
+# build
+/target
+**/*.rs.bk
+
+# local secrets & env — never commit
+.env
+.env.*
+!.env.example
+.secrets*
+deploy/k8s/overlays/**/secrets/
+*.pem
+*.key
+credentials.json
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# local state
+.wrangler/
+/data/

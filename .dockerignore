@@ -1,0 +1,10 @@
+target/
+.git/
+.github/
+deploy/
+docs/
+data/
+.env*
+.secrets*
+*.md
+!README.md

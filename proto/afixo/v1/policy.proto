@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "afixo/v1/common.proto";
+
+// policy-service owns the purpose vocabulary and disclosure rules. It stores and
+// selects candidates; it does NOT rank or filter — that is afixo-engine, run by
+// disclosure-service, so the whole decision is one pure, property-tested function.
+service PolicyService {
+  rpc ListPurposes(ListPurposesRequest) returns (ListPurposesResponse);
+
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse);
+  // Validates at write time: persona belongs to subject (identity-service),
+  // requester exists (auth-service), purpose is in the vocabulary. An invalid
+  // rule is never stored, so it can never fail open at request time.
+  rpc CreateRule(CreateRuleRequest) returns (Rule);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+
+  // The one indexed query of the algorithm: exact matches plus every applicable wildcard.
+  //   WHERE subject_id = $1
+  //     AND (requester_id = $2 OR requester_id IS NULL)
+  //     AND (purpose      = $3 OR purpose      IS NULL)
+  // INVALID_ARGUMENT when the purpose is not in the vocabulary.
+  rpc ListCandidateRules(ListCandidateRulesRequest) returns (ListCandidateRulesResponse);
+}
+
+message ListPurposesRequest {}
+message ListPurposesResponse {
+  repeated Purpose purposes = 1;
+}
+
+message ListRulesRequest {
+  string subject_id = 1;
+}
+message ListRulesResponse {
+  repeated Rule rules = 1;
+}
+
+message CreateRuleRequest {
+  string subject_id = 1;
+  optional string requester_id = 2;
+  optional string purpose = 3;
+  string persona_id = 4;
+  Sensitivity max_sensitivity = 5;
+  AllowList allow_list = 6;
+  int32 priority = 7;
+}
+
+message DeleteRuleRequest {
+  string subject_id = 1;
+  string rule_id = 2;
+}
+message DeleteRuleResponse {}
+
+message ListCandidateRulesRequest {
+  string subject_id = 1;
+  string requester_id = 2;
+  string purpose = 3;
+}
+message ListCandidateRulesResponse {
+  repeated Rule rules = 1;
+}

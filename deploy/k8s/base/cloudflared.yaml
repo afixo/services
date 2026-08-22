@@ -1,0 +1,118 @@
+# The cluster's only door, and it opens outwards: cloudflared dials Cloudflare
+# and receives requests for the two tunnel hostnames. No Service, no Ingress,
+# no public IP anywhere in this namespace.
+#
+# Both hostnames sit behind Cloudflare Access (Service Auth) and are only ever
+# called by the afixo-api Worker. Nothing an end user types resolves to this
+# tunnel: the public hostnames (afixo.io, api.afixo.io, …) are Workers.
+#
+# Secret `cloudflared-credentials` (created by deploy/scripts/cloudflare-tunnel-setup.sh):
+#   credentials.json  — the tunnel credentials file
+#   tunnel-id         — the tunnel uuid (kept out of this ConfigMap on purpose)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+data:
+  config.yaml: |
+    credentials-file: /etc/cloudflared-creds/credentials.json
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+    ha-connections: 2
+    ingress:
+      # dashboard traffic: afixo-api Worker (console mode) → console listener
+      - hostname: origin.afixo.io
+        service: http://gateway:8080
+      # requester traffic: afixo-api Worker (machine mode) → machine listener
+      - hostname: origin-api.afixo.io
+        service: http://gateway:8081
+      - service: http_status:404
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  labels:
+    app.kubernetes.io/name: cloudflared
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # the surge pod registers its edge connections before the old one drains
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflared
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.8.2
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
+            - run
+            - $(TUNNEL_ID)
+          env:
+            - name: TUNNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-credentials
+                  key: tunnel-id
+          ports:
+            - name: metrics
+              containerPort: 2000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared
+              readOnly: true
+            # beside the config, not inside it — nested mounts depend on kubelet ordering
+            - name: creds
+              mountPath: /etc/cloudflared-creds
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: creds
+          secret:
+            secretName: cloudflared-credentials
+            items:
+              - key: credentials.json
+                path: credentials.json

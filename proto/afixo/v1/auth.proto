@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "afixo/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// auth-service: the two caller types meet here and are never the same principal.
+//   * subjects  — humans; GitHub OAuth; opaque access (15 min) + rotating refresh (7 d) tokens
+//   * requesters — machines; OAuth2 client-credentials; opaque bearer tokens (1 h)
+// Every token is stored hashed; introspection is the only way to learn what a token means.
+service AuthService {
+  // --- subjects ---------------------------------------------------------------
+  rpc BeginGithubLogin(BeginGithubLoginRequest) returns (BeginGithubLoginResponse);
+  rpc CompleteGithubLogin(CompleteGithubLoginRequest) returns (SessionTokens);
+  rpc RefreshSession(RefreshSessionRequest) returns (SessionTokens);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+
+  // --- both -------------------------------------------------------------------
+  // Resolves any bearer token (subject access token or requester token) to a principal.
+  rpc IntrospectToken(IntrospectTokenRequest) returns (IntrospectTokenResponse);
+
+  // --- requesters -------------------------------------------------------------
+  rpc IssueClientToken(IssueClientTokenRequest) returns (IssueClientTokenResponse);
+  rpc CreateRequester(CreateRequesterRequest) returns (CreateRequesterResponse);
+  rpc ListRequesters(ListRequestersRequest) returns (ListRequestersResponse);
+  rpc GetRequester(GetRequesterRequest) returns (Requester);
+  rpc RotateRequesterSecret(RotateRequesterSecretRequest) returns (RotateRequesterSecretResponse);
+}
+
+message BeginGithubLoginRequest {
+  // Optional in-app path to return to after login (validated: must start with "/").
+  string redirect_to = 1;
+}
+message BeginGithubLoginResponse {
+  string authorize_url = 1;
+}
+
+message CompleteGithubLoginRequest {
+  string code = 1;
+  string state = 2;
+}
+
+message SessionTokens {
+  string access_token = 1;
+  string refresh_token = 2;
+  google.protobuf.Timestamp access_expires_at = 3;
+  google.protobuf.Timestamp refresh_expires_at = 4;
+  Subject subject = 5;
+  repeated string roles = 6;   // ["subject"] for now; cosmetic at the edge, authoritative here
+  string redirect_to = 7;      // echoed from BeginGithubLogin, already validated
+}
+
+message RefreshSessionRequest {
+  string refresh_token = 1;
+}
+
+message RevokeSessionRequest {
+  string access_token = 1;
+}
+message RevokeSessionResponse {}
+
+message IntrospectTokenRequest {
+  string token = 1;
+}
+message IntrospectTokenResponse {
+  bool active = 1;
+  oneof principal {
+    string subject_id = 2;
+    string requester_id = 3;
+  }
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message IssueClientTokenRequest {
+  string client_id = 1;
+  string client_secret = 2;
+}
+message IssueClientTokenResponse {
+  string access_token = 1;
+  int64 expires_in_seconds = 2;
+}
+
+message CreateRequesterRequest {
+  string owner_subject_id = 1;
+  string name = 2;
+}
+message CreateRequesterResponse {
+  Requester requester = 1;
+  string client_secret = 2;   // shown exactly once
+}
+
+message ListRequestersRequest {
+  // Unset: the public directory (every requester, no secrets). Set: only those owned by the subject.
+  optional string owner_subject_id = 1;
+}
+message ListRequestersResponse {
+  repeated Requester requesters = 1;
+}
+
+message GetRequesterRequest {
+  string requester_id = 1;
+}
+
+message RotateRequesterSecretRequest {
+  string owner_subject_id = 1;  // must own the requester — this is the fix for FINAL_REPORT §5.4(a)
+  string requester_id = 2;
+}
+message RotateRequesterSecretResponse {
+  string client_secret = 1;
+}

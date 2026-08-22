@@ -1,0 +1,18 @@
+# Staging tunnel hostnames (a separate tunnel — two cloudflared deployments
+# must never run the same tunnel id, or traffic would be split across namespaces).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+data:
+  config.yaml: |
+    credentials-file: /etc/cloudflared-creds/credentials.json
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+    ha-connections: 2
+    ingress:
+      - hostname: origin-staging.afixo.io
+        service: http://gateway:8080
+      - hostname: origin-api-staging.afixo.io
+        service: http://gateway:8081
+      - service: http_status:404

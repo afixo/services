@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: afixo
+  labels:
+    app.kubernetes.io/part-of: afixo
+    afixo.io/environment: production
+    # Pod Security Admission: everything here runs as non-root, read-only, no caps.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

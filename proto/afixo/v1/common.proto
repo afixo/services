@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package afixo.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Sensitivity is the four-point tier carried by every persona field and used by
+// disclosure rules as a ceiling. The numeric values are the contract: a field is
+// withheld when `field.sensitivity > rule.max_sensitivity`.
+enum Sensitivity {
+  SENSITIVITY_PUBLIC = 0;
+  SENSITIVITY_LOW = 1;
+  SENSITIVITY_MEDIUM = 2;
+  SENSITIVITY_HIGH = 3;
+}
+
+// A human identity owner. Owned by identity-service.
+message Subject {
+  string id = 1;            // uuid
+  string handle = 2;        // unique, url-safe; doubles as the public reference in /v1/disclose/:handle
+  string display_name = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message Field {
+  string key = 1;
+  string value = 2;
+  Sensitivity sensitivity = 3;
+}
+
+// A partial identity: a named bundle of typed fields. Owned by identity-service.
+message Persona {
+  string id = 1;
+  string subject_id = 2;
+  string label = 3;         // unique per subject, e.g. "legal", "work", "social"
+  repeated Field fields = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// A registered machine client. Owned by auth-service. The secret is never returned
+// after creation/rotation and is stored only as a SHA-256 digest.
+message Requester {
+  string id = 1;
+  string client_id = 2;
+  string name = 3;
+  string owner_subject_id = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp rotated_at = 6;
+}
+
+// An entry of the closed purpose vocabulary. Owned by policy-service.
+message Purpose {
+  string name = 1;
+  string description = 2;
+}
+
+// Presence of this message distinguishes "no allow-list" (ceiling only) from an
+// empty allow-list (nothing released).
+message AllowList {
+  repeated string keys = 1;
+}
+
+// A grant. NULL requester_id / purpose are wildcards. Rules never deny.
+message Rule {
+  string id = 1;
+  string subject_id = 2;
+  optional string requester_id = 3;
+  optional string purpose = 4;
+  string persona_id = 5;
+  Sensitivity max_sensitivity = 6;
+  AllowList allow_list = 7;
+  int32 priority = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
