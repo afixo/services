@@ -37,6 +37,9 @@ on:
         default: all
         required: true
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
@@ -57,9 +60,9 @@ jobs:
       overlay: ${{ steps.plan.outputs.overlay }}
       namespace: ${{ steps.plan.outputs.namespace }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: changes
         if: github.event_name == 'push'
         with:
@@ -126,13 +129,13 @@ jobs:
       matrix:
         service: ${{ fromJSON(needs.plan.outputs.services) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 3600
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -154,11 +157,11 @@ jobs:
       OVERLAY: deploy/k8s/overlays/${{ needs.plan.outputs.overlay }}
       NAMESPACE: ${{ needs.plan.outputs.namespace }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      - uses: imranismail/setup-kustomize@v2
+      - uses: imranismail/setup-kustomize@v3
       - run: doctl kubernetes cluster kubeconfig save --expiry-seconds 1800 "$CLUSTER"
 
       - name: Pin the images that were just built
