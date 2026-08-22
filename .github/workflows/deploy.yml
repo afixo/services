@@ -5,8 +5,10 @@
 #   push to master      → staging  (namespace afixo-staging), automatically
 #   workflow_dispatch   → staging or production (namespace afixo), by choice
 #
-# Repository secrets:  DIGITALOCEAN_ACCESS_TOKEN (kubernetes read — kubeconfig only)
-# Repository variables (optional): DOKS_CLUSTER_NAME, IMAGE_REGISTRY
+# Environment secret (staging, production): KUBE_CONFIG — a namespace-confined
+#   ServiceAccount kubeconfig from deploy/scripts/make-ci-kubeconfig.sh <env>.
+#   No DigitalOcean API token is needed anywhere.
+# Repository variable (optional): IMAGE_REGISTRY
 # The cluster pulls with the `registry-afixo` docker-registry Secret in each
 # namespace (a PAT with read:packages) — see docs/deploy.md.
 #
@@ -52,7 +54,6 @@ env:
   # ghcr.io/afixo/services/<service>; the image name must stay in sync with
   # deploy/k8s/base/*.yaml and the `images:` lists in both overlays.
   REGISTRY: ${{ vars.IMAGE_REGISTRY || format('ghcr.io/{0}', github.repository) }}
-  CLUSTER: ${{ vars.DOKS_CLUSTER_NAME || 'k8s-afixo-io-fra1' }}
   ALL_SERVICES: gateway auth identity policy disclosure audit
 
 jobs:
@@ -165,11 +166,21 @@ jobs:
       NAMESPACE: ${{ needs.plan.outputs.namespace }}
     steps:
       - uses: actions/checkout@v7
-      - uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - uses: imranismail/setup-kustomize@v3
-      - run: doctl kubernetes cluster kubeconfig save --expiry-seconds 1800 "$CLUSTER"
+
+      # Environment secret made by deploy/scripts/make-ci-kubeconfig.sh <env>:
+      # a ServiceAccount token confined to this namespace, unable to read Secrets.
+      - name: Cluster credentials
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          if [ -z "$KUBE_CONFIG" ]; then
+            echo "::error::secret KUBE_CONFIG is not set on environment '${{ needs.plan.outputs.environment }}' — run deploy/scripts/make-ci-kubeconfig.sh ${{ needs.plan.outputs.environment }}"
+            exit 1
+          fi
+          install -m 600 /dev/null "$RUNNER_TEMP/kubeconfig"
+          printf '%s' "$KUBE_CONFIG" > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
       - name: Pin the images that were just built
         env:

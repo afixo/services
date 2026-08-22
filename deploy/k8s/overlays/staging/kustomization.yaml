@@ -16,8 +16,7 @@ resources:
 
 patches:
   # ghcr.io pull credentials (the packages are private), created once per namespace:
-  #   kubectl -n afixo-staging create secret docker-registry registry-afixo \
-  #     --docker-server=ghcr.io --docker-username=<github user> --docker-password=<PAT with read:packages>
+  #   deploy/scripts/create-pull-secret.sh <PAT with read:packages> staging
   - target:
       kind: Deployment
     patch: |-
