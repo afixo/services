@@ -18,7 +18,7 @@ insert into purposes (name, description, sort_order) values
     ('billing',          'Invoice or charge this person',                              40),
     ('age_verification', 'Confirm this person meets an age requirement',               50),
     ('legal_kyc',        'Satisfy a legal know-your-customer obligation',              60),
-    ('support',          'Provide customer support to this person');
+    ('support',          'Provide customer support to this person',                    70);
 
 create table disclosure_rules (
     id              uuid primary key,
