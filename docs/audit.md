@@ -43,11 +43,18 @@ Length-prefixing makes the encoding injective (no `ab|c` vs `a|bc`).
 `recorded_at` is not committed — it is assigned on insert and two faithful
 recordings of the same decision may differ in it.
 
-**Append** (one transaction): `select hash from disclosure_events order by seq
-desc limit 1 for update` → compute → `insert … on conflict (event_id) do
-nothing` → return the row's `seq`. The `audit` Deployment uses
-`strategy: Recreate` so a surge pod never appends concurrently; the row lock
-is the second line of defence.
+**Append** (one transaction): `pg_advisory_xact_lock` → `select hash from
+disclosure_events order by seq desc limit 1 for update` (none → genesis) →
+compute → `insert … on conflict (event_id) do nothing returning seq, hash`
+(on conflict: select the existing row) → commit. The advisory lock is what
+serialises appenders: under READ COMMITTED a second writer that waited on the
+row lock resumes with its old snapshot and would chain onto the same
+predecessor — and an empty table has no row to lock at all. The `audit`
+Deployment uses `strategy: Recreate` as well, so a surge pod never appends
+concurrently; the row lock is the third line of defence. `decided_at` is
+committed at microsecond precision (what `timestamptz` stores), ids in their
+hyphenated lower-case form, absent values as `""` — append and verify hash
+through the same function.
 
 **Verify** (`audit.VerifyChain` → `GET /v1/audit/verify`): walk `seq`
 ascending, recompute, compare; report the first `broken_at_seq`. O(n); fine at

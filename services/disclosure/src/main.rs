@@ -4,6 +4,7 @@ use afixo_common::{config, grpc, telemetry};
 use afixo_proto::disclosure_service_server::DisclosureServiceServer;
 use tonic::transport::Server;
 
+mod convert;
 mod server;
 
 #[tokio::main]

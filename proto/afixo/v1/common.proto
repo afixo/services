@@ -71,4 +71,6 @@ message Rule {
   AllowList allow_list = 7;
   int32 priority = 8;
   google.protobuf.Timestamp created_at = 9;
+  // Creation order within the subject's rules; the engine's final tie-break.
+  int64 created_seq = 10;
 }

@@ -61,14 +61,14 @@ plumbing), `crates/engine` (the pure decision, property-tested).
    LoadBalancer/NodePort, no Ingress, no hostPort. Public hostnames are
    Workers; only `origin*` hostnames route to a tunnel, and each sits behind
    an Access Service Auth policy.
-9. **Never `git push`. Always ask before `git commit`.** Default branch is `master`.
+9. **Ask before `git commit`; push only when the user asks.** Default branch is `master`; commits are authored as the user (`valfz`).
 
 ## Commands
 
 ```sh
 make check          # cargo check --workspace --all-targets
 make lint           # cargo fmt --check + clippy -D warnings   (CI gate)
-make test           # unit + property tests, no infra needed
+make test           # all tests; the #[sqlx::test] suites need `make infra-up` + DATABASE_URL (.env)
 make infra-up       # postgres via docker compose
 make migrate        # apply every service's migrations locally
 make run-policy     # one service (reads .env; maps POLICY_DATABASE_URL → DATABASE_URL)
@@ -108,22 +108,28 @@ compose.yml            local infra; --profile full runs everything in containers
   `time::OffsetDateTime` ↔ `google.protobuf.Timestamp`.
 - Tracing: `tracing` everywhere, JSON in the cluster (`LOG_FORMAT=json`).
   Log ids and outcomes, never payloads.
-- Tests: pure logic gets unit + `proptest` (see `crates/engine`). Integration
-  tests against Postgres read `TEST_DATABASE_URL` (CI provides it) and must
-  create their own fixtures — never truncate.
+- Tests: pure logic gets unit + `proptest` (see `crates/engine`). Data
+  services use `#[sqlx::test(migrations = "./migrations")]`: one throw-away
+  database per test on the server named by `DATABASE_URL` (CI provides it), so
+  tests never share state and never truncate. Services that only orchestrate
+  (`disclosure`, `auth`'s GitHub/identity hops) test against in-process tonic /
+  axum stand-ins on ephemeral ports.
 
 ## Status (2026-08-22)
 
-Implemented: workspace, contract (all protos), migrations for all four
-databases, `afixo-engine` (complete, property-tested), `policy` (complete),
-`gateway` (all routes wired; works end-to-end for `/v1/health` and
-`/v1/purposes`), boot/health/shutdown for every service, Docker, kustomize
-(both overlays), CI/CD. Skeletons answering `UNIMPLEMENTED`: `auth`,
-`identity`, `disclosure`, `audit` (`chain.rs` hashing is done). Each service's
-CLAUDE.md carries its implementation plan.
+All six services are implemented: `gateway` (REST, two listeners), `auth`
+(GitHub login, rotating sessions, requesters, client tokens, introspection),
+`identity`, `policy`, `disclosure` (orchestration + synchronous audit) and
+`audit` (hash-chained log, `Record`/`ListDecisions`/`VerifyChain`), plus
+`afixo-engine`. Tests: unit + property tests (no infra), and `#[sqlx::test]`
+integration tests per data service — each test gets a throw-away database on
+the server named by `DATABASE_URL` (`make infra-up`, then `make test`; CI
+provides it). `disclosure` and `auth` test against in-process tonic/axum
+stand-ins. Not yet done: gateway integration tests, the Access-JWT check at
+the gateway, Criterion/load measurements.
 
 ## Git
 
-`origin` = `git@github.com:afixo/afixo-services.git`, branch `master`.
-Never push. Ask before committing. Commit messages: imperative, scoped by
+`origin` = `git@github.com:afixo/services.git`, branch `master`. Ask before
+committing; push only when asked. Commit messages: imperative, scoped by
 service (`auth: rotate refresh tokens`).

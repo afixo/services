@@ -17,6 +17,7 @@ afixo-engine = { path = "crates/engine" }
 
 # async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 
 # gRPC
 tonic = "0.14"
@@ -65,7 +66,7 @@ base64 = "0.23"
 hex = "0.4"
 
 # outbound HTTP (GitHub OAuth)
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
 
 # testing
 proptest = "1"

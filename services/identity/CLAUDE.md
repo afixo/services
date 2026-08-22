@@ -1,7 +1,7 @@
 # identity
 
-Subjects, personas and sensitivity-tiered fields. Status: **skeleton** —
-schema and contract final, every RPC answers `UNIMPLEMENTED`.
+Subjects, personas and sensitivity-tiered fields. Status: **implemented** —
+all nine RPCs, with integration tests against Postgres.
 
 Owns (db `afixo_identity`): `subjects`, `personas`, `persona_fields`. Called by
 the gateway (subject CRUD), by `auth` (`EnsureSubject` on login), by `policy`
@@ -27,18 +27,63 @@ the gateway (subject CRUD), by `auth` (`EnsureSubject` on login), by `policy`
 6. Field values are personal data: never log them. (Encrypting values at rest
    with AES-GCM + AAD = `persona_id` is a reasonable V2 item; not in scope now.)
 
-## Implementation plan
+## How it is built
 
-1. `repo.rs`: `SubjectRow`, `PersonaRow`, `FieldRow`; `get_persona_with_fields`
-   as two queries (persona, then fields ordered by key).
-2. RPCs in the order the dashboard needs them: `EnsureSubject`, `GetSubject`,
-   `ResolveSubject` (by handle, `NOT_FOUND` if absent), `ListPersonas`
-   (with fields — the list is small), `CreatePersona` (`ALREADY_EXISTS` on
-   duplicate label via `grpc::db_status`), `GetPersona`, `DeletePersona`,
-   `UpsertField` (`insert … on conflict (persona_id, key) do update`),
-   `DeleteField`. Each `*Field` RPC returns the full persona.
-3. Tests against `TEST_DATABASE_URL`: cross-subject access is `NOT_FOUND` for
-   every mutating RPC (the test the report said it was missing), label
-   uniqueness, clamp, `EnsureSubject` idempotency.
+```
+src/lib.rs       exposes repo + server so tests can drive the service struct
+src/main.rs      boot, migrate, serve (+ health)
+src/server.rs    IdentityService impl: parsing + validation at the boundary
+src/repo.rs      literal-SQL queries; ownership lives in the predicates
+tests/identity.rs  integration tests (#[sqlx::test], fresh db per test)
+migrations/      0001: subjects + personas + persona_fields
+```
+
+- **Ownership in SQL, not in Rust.** `DeletePersona` is `delete … where id = $1
+  and subject_id = $2`; `UpsertField` is `insert … select id, … from personas
+  where id = $1 and subject_id = $2 on conflict (persona_id, key) do update`;
+  `DeleteField` is `delete … where key = $3 and persona_id in (select id from
+  personas where id = $1 and subject_id = $2)`. `rows_affected == 0` is the only
+  signal, and it becomes `NOT_FOUND` (`"persona"` / `"field"`) — never a
+  distinct "not yours" answer. After a field mutation the persona is re-read
+  scoped by `subject_id`, so the response is exactly what the owner would `Get`.
+- **`GetPersona` scope is presence-based.** `subject_id: Some(s)` must parse and
+  match (`… and ($2::uuid is null or subject_id = $2)`); `Some("")` is a
+  malformed scope and fails closed with `INVALID_ARGUMENT`, it does not fall
+  back to the unscoped read.
+- **Fields are read `order by key collate "C"`** (byte order, independent of
+  the database locale) and grouped in memory for `ListPersonas` (one query for
+  the personas, one `= any($1)` for all their fields).
+- **Validation (server.rs):** handle → trim, ASCII-lowercase,
+  `ids::validate_handle`; label → trim, 1..=40 chars; key → `[A-Za-z0-9_.-]{1,64}`;
+  value → ≤ 4096 chars; sensitivity → clamped. `ResolveSubject` answers
+  `NOT_FOUND` for a malformed handle too (disclosure turns `NOT_FOUND` into the
+  uniform deny; a handle that cannot exist must not answer differently).
+- Errors go through `grpc::db_status` (duplicate label → `ALREADY_EXISTS`,
+  unknown subject on create → `FAILED_PRECONDITION` from the FK) and
+  `grpc::internal`. Logs carry `subject_id`/`persona_id` and outcomes only —
+  no keys, no values; `FieldRow`'s `Debug` redacts `value`.
+
+## Tests
+
+`tests/identity.rs` uses `#[sqlx::test(migrations = "./migrations")]`: sqlx
+creates a throw-away database per test on the server named by `DATABASE_URL`
+(the user needs `CREATEDB`; the compose user is a superuser), applies the
+migrations, and drops it when the test passes.
+
+```sh
+docker compose up -d postgres
+DATABASE_URL=postgres://afixo:afixo@localhost:5432/afixo cargo test -p afixo-identity
+```
+
+Covered: `EnsureSubject` idempotency + handle validation; subject lookups;
+persona create/list/get/delete; label validation and per-subject uniqueness;
+field upsert, byte-ordered keys, clamp, validation limits, delete; cascade on
+persona delete; cross-subject access is `NOT_FOUND` for every mutating RPC and
+for `GetPersona` with a foreign `subject_id`, and leaves the owner's data
+untouched; `GetPersona` without `subject_id` returns a foreign persona.
+
+Note: sqlx's harness reads `DATABASE_URL`, not the workspace's
+`TEST_DATABASE_URL`; the CI job must export `DATABASE_URL` as well for these
+tests to run there.
 
 Run: `make run-identity`.

@@ -35,7 +35,9 @@ jobs:
           --health-timeout 2s
           --health-retries 20
     env:
-      # integration tests (when added) read this; unit + property tests do not need it
+      # `#[sqlx::test]` creates a throw-away database per test on this server
+      # (it reads DATABASE_URL); unit + property tests do not need it.
+      DATABASE_URL: postgres://afixo:afixo@localhost:5432/afixo
       TEST_DATABASE_URL: postgres://afixo:afixo@localhost:5432/afixo
     steps:
       - uses: actions/checkout@v7

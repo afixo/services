@@ -1,10 +1,9 @@
 //! identity-service entrypoint. See CLAUDE.md in this directory.
 
 use afixo_common::{config, db, grpc, telemetry};
+use afixo_identity::server;
 use afixo_proto::identity_service_server::IdentityServiceServer;
 use tonic::transport::Server;
-
-mod server;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

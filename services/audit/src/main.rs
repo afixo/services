@@ -1,12 +1,9 @@
 //! audit-service entrypoint. See CLAUDE.md in this directory.
 
+use afixo_audit::server;
 use afixo_common::{config, db, grpc, telemetry};
 use afixo_proto::audit_service_server::AuditServiceServer;
 use tonic::transport::Server;
-
-#[allow(dead_code)] // wired in when `Record` persists rows (see CLAUDE.md)
-mod chain;
-mod server;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

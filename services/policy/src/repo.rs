@@ -52,6 +52,7 @@ impl From<RuleRow> for Rule {
             allow_list: r.allow_keys.map(|keys| AllowList { keys }),
             priority: r.priority,
             created_at: Some(to_proto(r.created_at)),
+            created_seq: r.created_seq,
         }
     }
 }
